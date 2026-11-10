@@ -5,6 +5,7 @@ import math
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from .filings import load_verified_filings, rank_candidates
 from .market import fetch_marketwide, summarize_marketwide
 from .scanner import fetch_pages, summarize
 
@@ -32,8 +33,31 @@ def main() -> int:
     scan.add_argument("--min-buy-usd", type=float, default=250000.0)
     scan.add_argument("--raw-output", help="Save all raw activity records, for offline review")
     scan.add_argument("--output", default="reports/signals.json")
+    verify = sub.add_parser(
+        "verify", help="Rank market-wide candidates using supplied SEC Form 4 XML")
+    verify.add_argument("--input", required=True,
+                        help="Complete v0.2 market-wide signals JSON")
+    verify.add_argument("--manifest", help="JSON listing exact SEC XML URLs")
+    verify.add_argument("--top", type=int, default=50)
+    verify.add_argument("--output", default="reports/verified_shortlist.json")
     args = parser.parse_args()
 
+    if args.command == "verify":
+        scan_doc = json.loads(Path(args.input).read_text(encoding="utf-8"))
+        manifest = (json.loads(Path(args.manifest).read_text(encoding="utf-8"))
+                    if args.manifest else {"filings": []})
+        filings = load_verified_filings(manifest)
+        result = rank_candidates(
+            scan_doc, filings,
+            related_owner_groups=manifest.get("related_owner_groups", []),
+            top_n=args.top)
+        save_json(args.output, result)
+        print(
+            f"Reviewed {result['scanned_candidate_count']} Massive candidates, "
+            f"{result['sec_filing_count_supplied']} SEC filings supplied, "
+            f"{result['sec_verified_candidate_count']} SEC purchase candidates; "
+            f"saved {args.output}; NO ORDERS")
+        return 0
     if args.command != "scan":
         parser.error("Only scan is supported")
     if args.window_days < 1 or not math.isfinite(args.min_buy_usd) or args.min_buy_usd < 0:
