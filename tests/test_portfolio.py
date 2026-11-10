@@ -295,6 +295,99 @@ class PaperPortfolioTests(unittest.TestCase):
         self.assertTrue(all(o["side"] == "buy" for o in c.posts))
         self.assertTrue(all(o["notional"] == "100.00" for o in c.posts))
 
+    @staticmethod
+    def old_auto_position():
+        s = state()
+        s["positions"] += [{
+            "symbol": "GPI", "asset_class": "us_equity", "side": "long",
+            "market_value": "90", "qty": "1.234567890"
+        }]
+        s["recent_orders"] += [{
+            "symbol": "GPI", "side": "buy", "status": "filled",
+            "client_order_id": "mi-auto-" + "a"*24,
+            "filled_qty": "1.234567890",
+            "submitted_at": "2026-10-01T14:00:00Z",
+            "filled_at": "2026-10-01T14:00:15Z",
+        }]
+        return s
+
+    def test_age_exit_only_auto_owned_lot(self):
+        c = FakeClient(self.old_auto_position())
+        p = plan([], client=c)
+        self.assertEqual(p["proposed_order"]["side"], "sell")
+        self.assertEqual(p["proposed_order"]["symbol"], "GPI")
+        self.assertEqual(p["proposed_order"]["qty"], "1.234567890")
+        self.assertEqual(p["held_positions"][0]["symbol"], "GME")
+
+    def test_age_exit_submits_one_paper_sell(self):
+        c = FakeClient(self.old_auto_position())
+        with tempfile.TemporaryDirectory() as tmp:
+            outcome = run_one_cycle(
+                c, [], expected_account=ACCOUNT, execute=True,
+                activation=AUTOMATION_OPT_IN, now=NOW,
+                reference_lookup=reference, intent_dir=tmp)
+        self.assertEqual(outcome["status"], "PAPER_SUBMITTED_NOT_A_FILL")
+        self.assertEqual(len(c.posts), 1)
+        self.assertEqual(c.posts[0]["side"], "sell")
+        self.assertEqual(c.posts[0]["symbol"], "GPI")
+        self.assertEqual(c.posts[0]["qty"], "1.234567890")
+        self.assertNotIn("notional", c.posts[0])
+
+    def test_mixed_history_never_liquidates_unattributable_shares(self):
+        s = self.old_auto_position()
+        s["recent_orders"].append({
+            "symbol": "GPI", "side": "buy", "status": "filled",
+            "client_order_id": "manual", "filled_at":"2026-10-02T14:00:00Z"
+        })
+        p = plan([], client=FakeClient(s))
+        self.assertIsNone(p["proposed_order"])
+
+    def test_exit_quantity_mismatch_not_traded(self):
+        s = self.old_auto_position()
+        s["positions"][1]["qty"] = "1.234567891"
+        p = plan([], client=FakeClient(s))
+        self.assertIsNone(p["proposed_order"])
+
+    def test_exit_unfilled_or_too_recent_not_traded(self):
+        s = self.old_auto_position()
+        s["recent_orders"][1]["status"] = "partially_filled"
+        self.assertIsNone(plan([], client=FakeClient(s))["proposed_order"])
+        s = self.old_auto_position()
+        s["recent_orders"][1]["filled_at"] = "2026-11-08T14:00:00Z"
+        self.assertIsNone(plan([], client=FakeClient(s))["proposed_order"])
+
+    def test_exit_under_cash_or_drawdown_freeze_still_possible(self):
+        s = self.old_auto_position()
+        s["account"]["equity"] = "700"
+        s["account"]["cash"] = "0"
+        p = plan([], client=FakeClient(s))
+        self.assertEqual(p["proposed_order"]["side"], "sell")
+
+    def test_existing_gme_pilot_never_sold_after_30_days(self):
+        s = state()
+        s["recent_orders"][0].update({
+            "side": "buy", "status": "filled",
+            "filled_qty":"0.89", "filled_at":"2026-09-01T14:00:00Z"
+        })
+        p = plan([], client=FakeClient(s))
+        self.assertIsNone(p["proposed_order"])
+        self.assertEqual(p["held_positions"][0]["symbol"], "GME")
+
+    def test_exit_idempotency_after_broker_ack(self):
+        c = FakeClient(self.old_auto_position())
+        with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+            first = run_one_cycle(
+                c, [], expected_account=ACCOUNT, execute=True,
+                activation=AUTOMATION_OPT_IN, now=NOW,
+                reference_lookup=reference, intent_dir=a)
+            second = run_one_cycle(
+                c, [], expected_account=ACCOUNT, execute=True,
+                activation=AUTOMATION_OPT_IN, now=NOW,
+                reference_lookup=reference, intent_dir=b)
+        self.assertEqual(first["status"], "PAPER_SUBMITTED_NOT_A_FILL")
+        self.assertEqual(second["status"], "NO_ELIGIBLE_PAPER_ORDER")
+        self.assertEqual(len(c.posts), 1)
+
     def test_missing_candidates_holds_current_gme(self):
         p = plan([])
         self.assertEqual(len(p["held_positions"]), 1)
