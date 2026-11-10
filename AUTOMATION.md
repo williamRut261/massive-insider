@@ -1,3 +1,9 @@
+# Massive Insider — archived v0.5 PAPER portfolio guide
+
+**The scheduled trading workflow now runs v0.6, not the fixed-$100 v0.5 manager.** Use [REBALANCE_V06.md](REBALANCE_V06.md) for current operating rules. The legacy instructions below describe the still-available `portfolio-cycle` command and should not be mistaken for the live scheduled algorithm.
+
+---
+
 # Massive Insider v0.5 — automatic, tightly limited PAPER portfolio manager
 
 **Implemented in GitHub, but AUTOMATED TRADING IS OFF until you enable it.** The first filled $25 GME PAPER pilot remains a manual/legacy position and will **not** be bought again or liquidated by v0.5. v0.5 uses current broker state on every cycle and never calls an Alpaca LIVE endpoint. All trading is fictional Alpaca PAPER money.
