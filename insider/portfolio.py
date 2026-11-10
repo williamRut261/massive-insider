@@ -17,6 +17,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from .paper import PaperClient, usd, validate_symbol
+from .identity import ticker_reference, verified_current_common_stock
 
 MAX_STOCKS = 10
 STRATEGY_CAP = Decimal("1000")
@@ -129,7 +130,8 @@ def trading_window(now, clock):
             and time(9, 45) <= local.time().replace(tzinfo=None) <= time(15, 40))
 
 
-def proposed_order(client, s, candidates, *, expected_account, now=None):
+def proposed_order(client, s, candidates, *, expected_account, now=None,
+                   reference_lookup=ticker_reference):
     """Make a READ-ONLY proposed order using real positions and ALL broker orders."""
     now = now or _now()
     if now.tzinfo is None:
@@ -192,6 +194,11 @@ def proposed_order(client, s, candidates, *, expected_account, now=None):
                str(o.get("client_order_id", "")).startswith("mi-auto-")
                for o in recent):
             continue
+        # A ticker alias is not an issuer identity. Require Massive ticker
+        # overview to confirm the SEC issuer CIK and current US common shares.
+        details = reference_lookup(symbol)
+        if not verified_current_common_stock(c, details):
+            continue
         asset = client.request("GET", "/v2/assets/" + symbol)
         if (not isinstance(asset, dict) or asset.get("symbol") != symbol
                 or asset.get("class") != "us_equity"
@@ -223,20 +230,24 @@ def proposed_order(client, s, candidates, *, expected_account, now=None):
 
 
 def run_one_cycle(client, candidates, *, expected_account, execute=False,
-                  activation="", now=None, intent_dir="data/automation_intents"):
+                  activation="", now=None, intent_dir="data/automation_intents",
+                  reference_lookup=ticker_reference):
     """Refresh broker state immediately before ANY optional PAPER submission."""
     now = now or _now()
     if execute and activation != AUTOMATION_OPT_IN:
         raise ValueError("Explicit MI_PAPER_AUTO_ENABLED activation required")
     snapshot = account_snapshot(client)
     plan = proposed_order(client, snapshot, candidates,
-                          expected_account=expected_account, now=now)
+                          expected_account=expected_account, now=now,
+                          reference_lookup=reference_lookup)
     if not execute or not plan["proposed_order"]:
         return {"status": ("READ_ONLY_PLAN" if not execute else
                            "NO_ELIGIBLE_PAPER_ORDER"), "plan": plan}
     # Re-read and re-plan to stop a new/filled order in between the two passes.
     later = proposed_order(client, account_snapshot(client), candidates,
-                           expected_account=expected_account, now=_now())
+                           expected_account=expected_account,
+                           now=(now if now is not None else _now()),
+                           reference_lookup=reference_lookup)
     if later.get("proposed_order") != plan["proposed_order"]:
         return {"status": "ABORTED_BROKER_STATE_CHANGED", "plan": later}
     order = plan["proposed_order"]
