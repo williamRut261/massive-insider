@@ -1,0 +1,14 @@
+# Do not commit credentials or research outputs
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+data/
+reports/
+*.sqlite
+.DS_Store
