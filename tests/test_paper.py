@@ -238,6 +238,26 @@ class PaperPilotTests(unittest.TestCase):
         self.assertNotEqual(x["client_order_id"], y["client_order_id"])
         self.assertTrue(x["client_order_id"].startswith("mi-paper-"))
 
+    def test_submit_rejects_changed_sec_sources(self):
+        c = FakeClient()
+        p = make_preview(report(), "GME", "25", c, now=NOW)
+        revised = report()
+        revised["all_candidates"][0]["sec_xml_sources"] = ["https://www.sec.gov/changed.xml"]
+        with self.assertRaisesRegex(ValueError, "SEC research sources changed"):
+            paper_submit(p, c, confirm="I-APPROVE-PAPER-ONLY",
+                         expected_account=ACCOUNT_ID, report=revised, now=NOW)
+        self.assertFalse(c.posted)
+
+    def test_submit_rechecks_sec_verification(self):
+        c = FakeClient()
+        p = make_preview(report(), "GME", "25", c, now=NOW)
+        revised = report()
+        revised["all_candidates"][0]["sec_verification_status"] = "UNVERIFIED_MASSIVE_AGGREGATE"
+        with self.assertRaisesRegex(ValueError, "requires"):
+            paper_submit(p, c, confirm="I-APPROVE-PAPER-ONLY",
+                         expected_account=ACCOUNT_ID, report=revised, now=NOW)
+        self.assertFalse(c.posted)
+
     def test_no_live_url_or_keys_allowed_in_source(self):
         src = Path(__file__).parents[1] / "insider" / "paper.py"
         data = src.read_text()
