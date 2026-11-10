@@ -155,7 +155,9 @@ def rank_current_purchases(rows, as_of, *, freshness_days=7,
                 or r.get("aff_10b5_one") is not False
                 or not (r.get("is_director") is True or r.get("is_officer") is True)
                 or r.get("equity_swap_involved") is True
-                or "common stock" not in str(r.get("security_title", "")).lower()):
+                or "common stock" not in str(r.get("security_title", "")).lower()
+                or any(word in str(r.get("security_title", "")).lower() for word in
+                       ("option", "warrant", "right", "preferred", "restricted", "unit"))):
             continue
         issuer, owner = str(r.get("issuer_cik", "")), str(r.get("owner_cik", ""))
         acc = str(r.get("accession_number", ""))
