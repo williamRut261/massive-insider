@@ -1,4 +1,10 @@
-# Massive Insider v0.3 — SEC ownership verification and research ranking
+# Massive Insider v0.4 — SEC insider research + guarded PAPER pilot
+
+**New: [Alpaca PAPER-only single-order setup instructions](PAPER_PILOT.md).** This is an explicitly approved, isolated broker-connectivity experiment; no LIVE endpoint or keys can be used and no orders are submitted by default. Automated portfolio trading and a validated historical strategy are not yet implemented.
+
+---
+
+## v0.3 — SEC ownership verification and research ranking
 
 **State: research only; no PAPER or LIVE order placement.** v0.3 builds on the tested v0.2 market-wide scanner. It ranks *all* candidates from your existing 90-day report, recognizes actual reporting-owner names/CIKs and Form 4 transaction codes from **explicit SEC XML documents**, groups joint filers and separately documented related entities conservatively, and maintains an audit trail. This is not a validated returns model.
 
