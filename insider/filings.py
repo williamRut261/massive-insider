@@ -252,6 +252,10 @@ def rank_candidates(scan: dict, filings: list[dict], *,
     if "ALL_MASSIVE_REPORTING_ISSUERS" not in str(scan.get("scope")):
         raise ValueError("Requires a market-wide scan, not the old 30-stock scan")
     signals = scan.get("signals")
+    start_day = date.fromisoformat(scan["from_date"])
+    end_day = date.fromisoformat(scan["as_of"])
+    if start_day > end_day:
+        raise ValueError("Invalid scan date interval")
     if not isinstance(signals, list) or top_n < 1:
         raise ValueError("Missing market-wide signals or invalid shortlist size")
     matches = defaultdict(list)
@@ -280,7 +284,8 @@ def rank_candidates(scan: dict, filings: list[dict], *,
         for doc in original:
             sec_links.append(doc["source_url"])
             txns = [x for x in doc["non_derivative_transactions"]
-                    if x["open_market_common_purchase"]]
+                    if x["open_market_common_purchase"] and x["date"]
+                    and start_day <= date.fromisoformat(x["date"]) <= end_day]
             for txn in txns:
                 # Identical reported trade attributes across filings may be the
                 # same jointly held shares. Count once, but disclose ambiguity.
