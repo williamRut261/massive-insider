@@ -5,6 +5,11 @@ import math
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from .auto_signals import fetch_recent_form4, rank_current_purchases
+from .portfolio import run_one_cycle, AUTOMATION_OPT_IN
+from zoneinfo import ZoneInfo
+import os
+from datetime import datetime
 from .filings import load_verified_filings, rank_candidates
 from .market import fetch_marketwide, summarize_marketwide
 from .paper import PaperClient, make_preview, paper_submit
@@ -53,7 +58,47 @@ def main() -> int:
     submit.add_argument("--expected-account", required=True)
     submit.add_argument("--confirm", required=True)
     submit.add_argument("--output", default="reports/paper_receipt.json")
+    cycle = sub.add_parser(
+        "portfolio-cycle", help="Latest Massive Form4 -> guarded PAPER allocator; dry-run by default")
+    cycle.add_argument("--execute", action="store_true",
+                       help="Allow one PAPER entry only when MI_PAPER_AUTO_ENABLED is set")
+    cycle.add_argument("--output", default="reports/portfolio_latest.json")
     args = parser.parse_args()
+
+    if args.command == "portfolio-cycle":
+        if args.execute and os.getenv("MI_PAPER_AUTO_ENABLED") != AUTOMATION_OPT_IN:
+            parser.error("Automation disabled: set MI_PAPER_AUTO_ENABLED to exact opt-in")
+        expected = os.getenv("MI_PAPER_ACCOUNT_ID", "").strip()
+        if not expected:
+            parser.error("Set MI_PAPER_ACCOUNT_ID to the dedicated PAPER account ID")
+        eastern_now = datetime.now(ZoneInfo("America/New_York"))
+        day = eastern_now.date().isoformat()
+        form4_rows = fetch_recent_form4(day, days=14)
+        candidates = rank_current_purchases(
+            form4_rows, day, freshness_days=7, min_purchase_usd=25000)
+        outcome = run_one_cycle(
+            PaperClient(), candidates, expected_account=expected,
+            execute=args.execute,
+            activation=os.getenv("MI_PAPER_AUTO_ENABLED", ""))
+        result = {
+            "project": "Massive Insider", "version": "0.5.0",
+            "mode": "PAPER_AUTOMATED_ENTRY_WITH_EXPLICIT_OPT_IN",
+            "as_of": day, "form4_record_count": len(form4_rows),
+            "qualified_recent_form4_issuers": len(candidates),
+            "outcome": outcome,
+        }
+        save_json(args.output, result)
+        print("Form4 records:", len(form4_rows),
+              "fresh qualifying issuers:", len(candidates),
+              "PAPER cycle:", outcome["status"])
+        if outcome["plan"].get("proposed_order"):
+            p = outcome["plan"]["proposed_order"]
+            print("Candidate:", p["symbol"], "size:", p["notional_usd"],
+                  "account positions:", outcome["plan"]["position_count"])
+        else:
+            print("Reason:", outcome["plan"].get("block_reason"))
+        print("Report:", args.output, "LIVE: DISABLED")
+        return 0
 
     if args.command == "paper-status":
         acct = PaperClient().request("GET", "/v2/account")
