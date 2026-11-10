@@ -201,6 +201,11 @@ def proposed_order(client, s, candidates, *, expected_account, now=None,
         "account_id": expected_account,
         "equity_usd": str(x["equity"]),
         "cash_usd": str(x["cash"]),
+        "equity_change_from_initial_1000_usd": str(
+            (x["equity"] - STRATEGY_CAP).quantize(Decimal(".01"))),
+        "equity_change_pct_before_cash_flow_adjustments": str(
+            ((x["equity"] / STRATEGY_CAP - Decimal("1")) * 100)
+            .quantize(Decimal(".01"))),
         "held_positions": x["holdings"],
         "position_count": len(x["held"]),
         "daily_automation_orders": daily,
