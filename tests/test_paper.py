@@ -40,7 +40,7 @@ def state():
         "positions": [], "open_orders": [],
         "clock": {"is_open": True},
         "asset": {
-            "symbol": "GME", "asset_class": "us_equity",
+            "symbol": "GME", "class": "us_equity",
             "status": "active", "tradable": True,
             "fractionable": True, "exchange": "NYSE",
         },
@@ -161,6 +161,30 @@ class PaperPilotTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "empty account"):
             make_preview(report(), "GME", "25", c, now=NOW)
 
+    def test_real_alpaca_asset_schema_uses_class_not_asset_class(self):
+        # Official Alpaca GET /v2/assets/{symbol} schema uses "class".
+        c = FakeClient()
+        self.assertIn("class", c.snapshot["asset"])
+        self.assertNotIn("asset_class", c.snapshot["asset"])
+        plan = make_preview(report(), "GME", "25", c, now=NOW)
+        self.assertEqual(plan["notional_usd"], "25.00")
+        self.assertFalse(c.posted)
+
+    def test_legacy_wrong_asset_class_field_must_not_pass(self):
+        c = FakeClient()
+        c.snapshot["asset"]["asset_class"] = "us_equity"
+        del c.snapshot["asset"]["class"]
+        with self.assertRaisesRegex(ValueError, "class is not us_equity"):
+            make_preview(report(), "GME", "25", c, now=NOW)
+        self.assertFalse(c.posted)
+
+    def test_nonfractionable_is_specific_failure(self):
+        c = FakeClient()
+        c.snapshot["asset"]["fractionable"] = False
+        with self.assertRaisesRegex(ValueError, "fractionable is not true"):
+            make_preview(report(), "GME", "25", c, now=NOW)
+        self.assertFalse(c.posted)
+
     def test_fractional_asset_required(self):
         c = FakeClient()
         c.snapshot["asset"]["fractionable"] = False
@@ -170,7 +194,7 @@ class PaperPilotTests(unittest.TestCase):
     def test_otc_or_crypto_refused(self):
         for asset_class, exchange in (("crypto", "NYSE"), ("us_equity", "OTC")):
             c = FakeClient()
-            c.snapshot["asset"]["asset_class"] = asset_class
+            c.snapshot["asset"]["class"] = asset_class
             c.snapshot["asset"]["exchange"] = exchange
             with self.subTest(asset_class=asset_class), self.assertRaises(ValueError):
                 make_preview(report(), "GME", "25", c, now=NOW)
