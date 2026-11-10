@@ -1,4 +1,4 @@
-name: Massive Insider - guarded PAPER portfolio
+name: Massive Insider - PAPER conviction rebalancing v0.6
 
 on:
   # Scheduled about every 15 minutes during US stock market hours, weekdays.
@@ -36,7 +36,7 @@ jobs:
           python-version: '3.11'
       - name: Run safety regression tests offline
         run: python -m unittest discover -s tests -q
-      - name: Scan fresh Form 4 and manage dedicated PAPER account (opt-in only)
+      - name: Scan purchases and sales, score convictions and rebalance PAPER (v0.6)
         env:
           MASSIVE_API_KEY: ${{ secrets.MI_MASSIVE_API_KEY }}
           MI_ALPACA_PAPER_KEY_ID: ${{ secrets.MI_ALPACA_PAPER_KEY_ID }}
@@ -51,7 +51,7 @@ jobs:
           test -n "${MI_ALPACA_PAPER_SECRET_KEY:?Missing PAPER secret}"
           test -n "${MI_PAPER_ACCOUNT_ID:?Missing dedicated PAPER account ID}"
           test "${MI_PAPER_AUTO_ENABLED:-}" = "I-ENABLE-PAPER-AUTO"
-          python -m insider portfolio-cycle --execute \
-            --output reports/portfolio_latest.json
+          python -m insider rebalance-cycle --execute \
+            --output reports/rebalance_latest.json
 
 # No code write permissions, no artifacts containing credentials, no LIVE access.
