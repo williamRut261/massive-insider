@@ -1,4 +1,84 @@
-# Massive Insider v0.2 — Market-wide SEC issuer activity research
+# Massive Insider v0.3 — SEC ownership verification and research ranking
+
+**State: research only; no PAPER or LIVE order placement.** v0.3 builds on the tested v0.2 market-wide scanner. It ranks *all* candidates from your existing 90-day report, recognizes actual reporting-owner names/CIKs and Form 4 transaction codes from **explicit SEC XML documents**, groups joint filers and separately documented related entities conservatively, and maintains an audit trail. This is not a validated returns model.
+
+## 1. Update and run offline tests
+
+```bash
+cd ~/massive-insider
+git pull
+python3 -m unittest discover -s tests -v
+```
+
+## 2. Rank all 306 candidates offline — no network or secrets required
+
+```bash
+python3 -m insider verify \
+  --input reports/marketwide_2026-11-10.json \
+  --top 30 \
+  --output reports/v03_shortlist_all.json
+```
+
+This uses the **saved market-wide results on your Mac**. It evaluates all 306 previously flagged candidates and lists the first 30 in `shortlist` while retaining the entire ranked candidate set in `all_candidates`. With no SEC manifest, every result is explicitly **UNVERIFIED_MASSIVE_AGGREGATE**. The order is a *research triage order*, not a prediction of investment returns.
+
+## 3. Verify example SEC reporting owners and transaction codes
+
+SEC asks automated callers to declare a user agent with contact information. In your private Terminal session, set:
+
+```bash
+export SEC_USER_AGENT="MassiveInsiderResearch your-own-contact-email@example.com"
+```
+
+Replace the example address with an email address you control. Do **not** put the address in a public repo or paste it into chat.
+
+```bash
+python3 -m insider verify \
+  --input reports/marketwide_2026-11-10.json \
+  --manifest examples/sec_form4_sources_2026.json \
+  --top 30 \
+  --output reports/v03_sec_sample.json
+```
+
+The example manifest contains **three real SEC Form 4 XML URLs**, one for GME and two for GPI. It is NOT a complete filing inventory for either company or for all 306 candidates. SEC filings may be refused (HTTP 403/429) if your client/user-agent is not accepted; no SEC XML connectivity has been exercised by our offline CI tests. The program refuses redirects, non-SEC URLs, non-XML documents, malformed transaction values, duplicate accessions, and incomplete market-wide input.
+
+To inspect actual reporting owners in the sample report:
+
+```bash
+python3 - <<'PY'
+import json
+d = json.load(open("reports/v03_sec_sample.json"))
+print("Candidates reviewed:", d["scanned_candidate_count"])
+print("SEC XML filings supplied:", d["sec_filing_count_supplied"])
+print("Candidates with SEC-confirmed purchase transactions:", d["sec_verified_candidate_count"])
+for c in d["shortlist"]:
+    if c["sec_verification_status"] == "SEC_FORM4_PURCHASE_RESEARCH":
+        print(c["historical_tickers"], c["sec_confirmed_qualifying_purchase_usd"])
+        for owner in c["reporting_owners_from_sec"]:
+            print(" ", owner["owner_name"], owner["owner_cik"],
+                  "officer:", owner["officer"], "director:", owner["director"],
+                  "10% owner:", owner["ten_percent_owner"])
+        print("Conservative related-owner groups:", c["related_owner_group_members"])
+PY
+```
+
+## SEC source and group verification limits
+
+- Only specific official SEC Form 4/4-A XML documents listed in a manifest are fetched and parsed. The system **does not automatically discover or verify every Form 4 across all 306 issuers**. A reviewed issuer may still have other relevant filings.
+- A **P + A** (purchase/acquisition) in a non-derivative **common stock** transaction with positive price and shares is a qualifying research transaction. Awards, option exercises, sales, zero-priced transfers, derivatives, and ambiguous securities are excluded from the SEC purchase subtotal. 4/A amendments are listed for review but **not automatically added** to avoid double counting.
+- Owner names, owner CIKs, officer/director/10%-holder flags, direct/indirect ownership, filing source URL, transaction date and price, and Rule 10b5-1 checkbox are preserved from the SEC XML. A checkbox or missing checkbox is **not** proof of discretionary intent.
+- Identical reported trade details across different filings are counted only once, to reduce duplicated beneficial ownership reports; this may conservatively undercount identical independent trades. A joint filing's multiple reporting CIKs are counted as **one possible owner group**. Cross-filing relationships are merged **only** if a `related_owner_groups` entry supplies explicit SEC evidence.
+- Different reporting CIKs or an issuer/day `purchaser_count` do **not** independently prove independent capital decisions. This is not a true ownership-control graph. For any group with significant money, follow footnotes, corporate-control chains and amendments manually.
+- **SEC filing acceptance timestamps are not independently retrieved by v0.3.** Historical transaction dates are bounded by the requested scan, but full point-in-time backtests must also use the EDGAR **accepted timestamp** (next tradable session) and account for 1–3-minute dissemination delays.
+- A Form 4 `P` can involve indirect ownership, specialist funds, and 10% holders rather than executives spending personal cash. All results remain `listed_common_stock_eligibility_verified: false`, `independent_economic_buyers_verified: false`, and `investment_signal_validated: false`.
+- No broker integration, no order code, no production scheduling, no risk of accessing A15, Webull, STONKS, or Coinbase. Input and output are local; `data/` and `reports/` remain ignored by Git.
+
+**Full 306-company SEC verification and the insider-following backtest are further development work.** Do not interpret the presence of 306 Massive research flags as 306 proven open-market trades or a profitable strategy.
+
+Primary documentation: [SEC Ownership XML technical specifications](https://www.sec.gov/submit-filings/technical-specifications) · [SEC fair-access requirements](https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data) · [Official SEC filing search](https://www.sec.gov/search-filings)
+
+---
+
+## v0.2: Market-wide SEC issuer activity research
 
 **Separate, read-only insider-following research. Not a brokerage bot.** The original 30-stock scanner is preserved; v0.2 adds an opt-in **market-wide issuer activity scan** using Massive's [Insider Trading Activity API](https://massive.com/docs/rest/stocks/filings/insider-activity).
 
