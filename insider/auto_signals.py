@@ -189,6 +189,12 @@ def rank_current_purchases(rows, as_of, *, freshness_days=7,
             "filing_date": fd.isoformat(), "transaction_date": td.isoformat(),
             "accession_number": acc,
             "value_usd": round(value, 2),
+            # Public Form 4 quantities enable v0.6 conviction scoring.
+            # They are not interpreted as independently verified economics.
+            "shares": shares,
+            "shares_owned_following_transaction":
+                _money(r.get("shares_owned_following_transaction"))
+                if r.get("shares_owned_following_transaction") is not None else None,
         })
     items = []
     for (issuer, symbol), txns in grouped.items():
