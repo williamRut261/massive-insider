@@ -83,7 +83,8 @@ class PaperClient:
 
     def request(self, method, path, data=None):
         # Strict request allowlist — impossible to route to LIVE API.
-        allowed_get = {"/v2/account", "/v2/positions", "/v2/orders?status=open&limit=500", "/v2/clock"}
+        allowed_get = {"/v2/account", "/v2/positions", "/v2/orders?status=open&limit=500",
+                       "/v2/orders?status=all&limit=500", "/v2/clock"}
         asset = re.fullmatch(r"/v2/assets/([A-Z]{1,5})", path)
         by_client = path.startswith("/v2/orders:by_client_order_id?client_order_id=")
         if by_client:
