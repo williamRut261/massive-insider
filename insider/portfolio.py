@@ -1,7 +1,7 @@
 """Guarded automated allocation for a dedicated $1k Alpaca PAPER account.
 
-This is an *entry-only* portfolio allocator, NOT yet an exit/rebalancing
-engine. It preserves the existing GME pilot position, never trades LIVE,
+This is a guarded portfolio allocator with conservative 30-day exits
+of only manager-created positions. It retains existing GME, never trades LIVE,
 does not borrow or short, and cannot place an order without explicit
 persistent operator opt-in and broker account ID verification.
 """
@@ -130,6 +130,56 @@ def trading_window(now, clock):
             and time(9, 45) <= local.time().replace(tzinfo=None) <= time(15, 40))
 
 
+def due_manager_exits(x, now):
+    """Only dispose 30-day-old lots fully attributable to THIS automation.
+
+    Any historical pilot/manual trade, mixed ownership, unfilled order,
+    missing history, quantity mismatch or ambiguous evidence means HOLD.
+    No automatic sale of the existing GME pilot position.
+    """
+    exits = []
+    for position in x["holdings"]:
+        symbol = position["symbol"]
+        related = [o for o in x["recent_orders"] if o.get("symbol") == symbol]
+        if len(related) != 1:
+            continue
+        order = related[0]
+        client_id = str(order.get("client_order_id") or "")
+        if (not AUTO_ID.fullmatch(client_id) or order.get("side") != "buy"
+                or order.get("status") != "filled"):
+            continue
+        filled_at = str(order.get("filled_at") or "")
+        if not filled_at:
+            continue
+        try:
+            filled_date = datetime.fromisoformat(
+                filled_at.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if filled_date.tzinfo is None or (now - filled_date).days < 30:
+            continue
+        try:
+            qty = usd(position["qty"])
+            filled_qty = usd(order.get("filled_qty"))
+        except (TypeError, ValueError):
+            continue
+        if (qty <= 0 or qty != filled_qty or
+                qty.as_tuple().exponent < -9):
+            continue
+        exit_hash = hashlib.sha256(
+            (x["account_id"] + "|" + symbol + "|" + client_id +
+             "|age30").encode()).hexdigest()[:24]
+        exits.append({
+            "symbol": symbol, "side": "sell",
+            "qty": str(qty), "type": "market", "time_in_force": "day",
+            "client_order_id": "mi-auto-" + exit_hash,
+            "source": "30-day exit of exclusively manager-owned PAPER shares",
+            "original_buy_order_id": client_id,
+            "original_fill_at": filled_date.isoformat(),
+        })
+    return sorted(exits, key=lambda item: item["original_fill_at"])
+
+
 def proposed_order(client, s, candidates, *, expected_account, now=None,
                    reference_lookup=ticker_reference):
     """Make a READ-ONLY proposed order using real positions and ALL broker orders."""
@@ -166,8 +216,7 @@ def proposed_order(client, s, candidates, *, expected_account, now=None,
         block = "Outside eligible regular market hours or broker clock closed"
     elif daily >= MAX_DAILY_NEW_ORDERS:
         block = "Maximum two automation orders already submitted today"
-    elif len(x["held"]) >= MAX_STOCKS:
-        block = "Maximum ten current positions"
+
     elif x["equity"] < STRATEGY_CAP * Decimal(".80"):
         block = "Equity below 80% of initial $1k; new buying suspended"
     elif x["cash"] <= CASH_RESERVE:
@@ -176,6 +225,23 @@ def proposed_order(client, s, candidates, *, expected_account, now=None,
         block = "Already at $1k gross stock exposure"
     if block:
         basic["block_reason"] = block
+        return basic
+    # Time-based exit comes before new buying and never touches pilot/manual lots.
+    for exit_order in due_manager_exits(x, now):
+        asset = client.request("GET", "/v2/assets/" + exit_order["symbol"])
+        if (isinstance(asset, dict)
+                and asset.get("symbol") == exit_order["symbol"]
+                and asset.get("class") == "us_equity"
+                and asset.get("status") == "active"
+                and asset.get("tradable") is True
+                and asset.get("fractionable") is True
+                and asset.get("exchange") in {"NYSE", "NASDAQ", "AMEX"}
+                and not any(o.get("client_order_id") == exit_order["client_order_id"]
+                            for o in x["recent_orders"])):
+            basic["proposed_order"] = exit_order
+            return basic
+    if len(x["held"]) >= MAX_STOCKS:
+        basic["block_reason"] = "Maximum ten current positions"
         return basic
     if not isinstance(candidates, list):
         raise ValueError("Malformed latest insider candidates")
@@ -262,7 +328,9 @@ def run_one_cycle(client, candidates, *, expected_account, execute=False,
     try:
         with marker.open("x", encoding="utf-8") as f:
             json.dump({"client_order_id": cid, "paper_account_id": expected_account,
-                       "symbol": order["symbol"], "notional": order["notional_usd"],
+                       "symbol": order["symbol"], "side": order["side"],
+                       "notional": order.get("notional_usd"),
+                       "qty": order.get("qty"),
                        "attempted_at_utc": _now().isoformat()}, f)
             f.flush()
             os.fsync(f.fileno())
@@ -270,13 +338,18 @@ def run_one_cycle(client, candidates, *, expected_account, execute=False,
         return {"status": "ALREADY_ATTEMPTED_NO_RETRY", "plan": plan}
     # One PAPER POST, no automatic retry. New order ID is fixed per filing
     # event, so a workflow restart cannot silently create duplicates.
-    receipt = client.submit({
+    payload = {
         "symbol": order["symbol"],
-        "notional": order["notional_usd"],
-        "side": "buy", "type": "market", "time_in_force": "day",
-        "extended_hours": False,
-        "client_order_id": cid,
-    })
+        "side": order["side"], "type": "market", "time_in_force": "day",
+        "extended_hours": False, "client_order_id": cid,
+    }
+    if order["side"] == "buy":
+        payload["notional"] = order["notional_usd"]
+    elif order["side"] == "sell":
+        payload["qty"] = order["qty"]
+    else:
+        raise ValueError("Unsupported paper order side")
+    receipt = client.submit(payload)
     if (not isinstance(receipt, dict) or
             receipt.get("client_order_id") != cid or
             receipt.get("symbol") != order["symbol"]):
