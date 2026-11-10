@@ -1,11 +1,18 @@
 name: Massive Insider - guarded PAPER portfolio
 
 on:
-  # 09:45 EST / 09:45 EDT respectively; second UTC run can be 10:45 EDT.
-  # The bot checks the actual NYSE paper market clock before ANY order.
+  # Scheduled about every 15 minutes during US stock market hours, weekdays.
+  # GitHub timezone support handles both EST and EDT automatically.
+  # Staggered 07/22/37/52 avoids the top-of-hour Actions congestion.
+  # Broker market clock, 09:45-15:40 NY trading window and safety limits
+  # are rechecked before any simulated order. Schedules may be delayed.
   schedule:
-    - cron: '45 13 * * 1-5'
-    - cron: '45 14 * * 1-5'
+    - cron: '52 9 * * 1-5'
+      timezone: 'America/New_York'
+    - cron: '7,22,37,52 10-14 * * 1-5'
+      timezone: 'America/New_York'
+    - cron: '7,22,37 15 * * 1-5'
+      timezone: 'America/New_York'
   workflow_dispatch:
 
 permissions:
@@ -36,7 +43,14 @@ jobs:
           MI_ALPACA_PAPER_SECRET_KEY: ${{ secrets.MI_ALPACA_PAPER_SECRET_KEY }}
           MI_PAPER_ACCOUNT_ID: ${{ vars.MI_PAPER_ACCOUNT_ID }}
           MI_PAPER_AUTO_ENABLED: ${{ secrets.MI_PAPER_AUTO_ENABLED }}
+        shell: bash
         run: |
+          set -euo pipefail
+          test -n "${MASSIVE_API_KEY:?Missing Massive secret}"
+          test -n "${MI_ALPACA_PAPER_KEY_ID:?Missing PAPER key ID}"
+          test -n "${MI_ALPACA_PAPER_SECRET_KEY:?Missing PAPER secret}"
+          test -n "${MI_PAPER_ACCOUNT_ID:?Missing dedicated PAPER account ID}"
+          test "${MI_PAPER_AUTO_ENABLED:-}" = "I-ENABLE-PAPER-AUTO"
           python -m insider portfolio-cycle --execute \
             --output reports/portfolio_latest.json
 
