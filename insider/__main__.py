@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .filings import load_verified_filings, rank_candidates
 from .market import fetch_marketwide, summarize_marketwide
+from .paper import PaperClient, make_preview, paper_submit
 from .scanner import fetch_pages, summarize
 
 
@@ -40,7 +41,43 @@ def main() -> int:
     verify.add_argument("--manifest", help="JSON listing exact SEC XML URLs")
     verify.add_argument("--top", type=int, default=50)
     verify.add_argument("--output", default="reports/verified_shortlist.json")
+    status = sub.add_parser("paper-status", help="Read-only isolated Alpaca PAPER account status")
+    preview = sub.add_parser("paper-preview", help="Read-only preview of ONE capped PAPER buy")
+    preview.add_argument("--input", required=True, help="SEC v0.3 verification report")
+    preview.add_argument("--symbol", required=True)
+    preview.add_argument("--notional", default="25.00")
+    preview.add_argument("--output", default="reports/paper_preview.json")
+    submit = sub.add_parser("paper-submit", help="ONE Alpaca PAPER order with explicit approval")
+    submit.add_argument("--plan", required=True)
+    submit.add_argument("--expected-account", required=True)
+    submit.add_argument("--confirm", required=True)
+    submit.add_argument("--output", default="reports/paper_receipt.json")
     args = parser.parse_args()
+
+    if args.command == "paper-status":
+        acct = PaperClient().request("GET", "/v2/account")
+        print("PAPER ONLY account ID:", acct.get("id"))
+        print("Status:", acct.get("status"), "Cash:", acct.get("cash"),
+              "Equity:", acct.get("equity"), "Trading blocked:", acct.get("trading_blocked"))
+        print("NO ORDERS")
+        return 0
+    if args.command == "paper-preview":
+        report = json.loads(Path(args.input).read_text(encoding="utf-8"))
+        plan = make_preview(report, args.symbol, args.notional, PaperClient())
+        save_json(args.output, plan)
+        print("Read-only PAPER preview:", args.output)
+        print("Account ID:", plan["paper_account_id"], "Symbol:", plan["symbol"],
+              "Notional:", plan["notional_usd"], "Market open:", plan["market_open_at_preview"])
+        print("Expires:", plan["expires_at"], "NO ORDERS")
+        return 0
+    if args.command == "paper-submit":
+        plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+        result = paper_submit(plan, PaperClient(), confirm=args.confirm,
+                              expected_account=args.expected_account)
+        save_json(args.output, result)
+        print("PAPER broker response:", result["status"], "saved:", args.output)
+        print("Inspect order status at the Alpaca PAPER dashboard; submitted != filled")
+        return 0
 
     if args.command == "verify":
         scan_doc = json.loads(Path(args.input).read_text(encoding="utf-8"))
