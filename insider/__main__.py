@@ -6,6 +6,8 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from .auto_signals import fetch_recent_form4, rank_current_purchases
+from .conviction import score_candidates
+from .rebalance import run_rebalance_cycle
 from .portfolio import run_one_cycle, AUTOMATION_OPT_IN
 from zoneinfo import ZoneInfo
 import os
@@ -64,7 +66,73 @@ def main() -> int:
                        help="Allow one PAPER entry only when MI_PAPER_AUTO_ENABLED is set")
     cycle.add_argument("--output", default="reports/portfolio_latest.json")
     cycle.add_argument("--history-output", default="reports/portfolio_history.jsonl")
+    upgrade = sub.add_parser(
+        "rebalance-cycle",
+        help="v0.6 four-factor conviction 100%-allocation PAPER rebalance; dry-run by default")
+    upgrade.add_argument("--execute", action="store_true",
+                         help="At most one PAPER rebalance order with exact opt-in")
+    upgrade.add_argument("--output", default="reports/rebalance_latest.json")
+    upgrade.add_argument("--history-output", default="reports/rebalance_history.jsonl")
     args = parser.parse_args()
+
+    if args.command == "rebalance-cycle":
+        if args.execute and os.getenv("MI_PAPER_AUTO_ENABLED") != AUTOMATION_OPT_IN:
+            parser.error("Automation disabled: set MI_PAPER_AUTO_ENABLED to exact PAPER opt-in")
+        expected = os.getenv("MI_PAPER_ACCOUNT_ID", "").strip()
+        if not expected:
+            parser.error("Set MI_PAPER_ACCOUNT_ID to the dedicated PAPER account ID")
+        now = datetime.now(ZoneInfo("America/New_York"))
+        day = now.date().isoformat()
+        purchases = fetch_recent_form4(day, days=14, transaction_code="P")
+        # Complete second, independently paginated feed; no missing sales
+        # substituted with zeros. Input failure prevents ALL PAPER orders.
+        sales = fetch_recent_form4(day, days=7, transaction_code="S")
+        preliminary = rank_current_purchases(
+            purchases, day, freshness_days=7, min_purchase_usd=25000)
+        conviction = score_candidates(preliminary, sales, day)
+        outcome = run_rebalance_cycle(
+            PaperClient(), conviction, expected_account=expected,
+            execute=args.execute,
+            activation=os.getenv("MI_PAPER_AUTO_ENABLED", ""))
+        result = {
+            "project": "Massive Insider", "version": "0.6.0",
+            "mode": "PAPER_ONLY_100_PCT_CONVICTION_TARGETS_WITH_0_5_PCT_RESERVE",
+            "as_of": day,
+            "purchase_form4_rows": len(purchases),
+            "sale_form4_rows": len(sales),
+            "preliminary_purchase_candidates": len(preliminary),
+            "conviction_research_candidates": len(conviction),
+            "research_cap_note": "Scores only top 20 preliminary candidates; not an exhaustive market-wide ranking",
+            "scores": conviction,
+            "outcome": outcome,
+        }
+        save_json(args.output, result)
+        history = Path(args.history_output)
+        history.parent.mkdir(parents=True, exist_ok=True)
+        audit = {
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "as_of": day, "paper_account_id": expected,
+            "equity_usd": outcome["plan"]["equity_usd"],
+            "cash_usd": outcome["plan"]["cash_usd"],
+            "targets": outcome["plan"]["target_weights"],
+            "protected_positions": outcome["plan"]["protected_positions"],
+            "cycle_status": outcome["status"],
+            "proposed_order": outcome["plan"].get("proposed_order"),
+            "broker_order": outcome.get("paper_broker_order"),
+        }
+        with history.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(audit, allow_nan=False) + "\n")
+        print("v0.6 PAPER four-factor rebalance:",
+              "purchases:", len(purchases), "sales:", len(sales),
+              "qualified:", len(preliminary), "scored:", len(conviction))
+        print("Cycle:", outcome["status"],
+              "equity:", outcome["plan"]["equity_usd"],
+              "protected:", outcome["plan"]["protected_positions"])
+        print("Targets:", outcome["plan"]["target_weights"])
+        print("Order:", outcome["plan"].get("proposed_order"),
+              "reason:", outcome["plan"].get("block_reason"))
+        print("Report:", args.output, "LIVE: DISABLED")
+        return 0
 
     if args.command == "portfolio-cycle":
         if args.execute and os.getenv("MI_PAPER_AUTO_ENABLED") != AUTOMATION_OPT_IN:
