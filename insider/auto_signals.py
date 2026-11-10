@@ -64,8 +64,10 @@ def read_form4(url, token):
 
 
 def fetch_recent_form4(as_of, *, days=14, token=None, request=read_form4,
-                       pause=time.sleep, max_pages=50):
+                       pause=time.sleep, max_pages=50, transaction_code="P"):
     end = date.fromisoformat(as_of)
+    if transaction_code not in ("P", "S"):
+        raise ValueError("Only individual P/S Form 4 transaction feeds are allowed")
     if not (1 <= days <= 30) or max_pages < 1:
         raise ValueError("Invalid Form 4 date window or pagination")
     if end > date.today():
@@ -78,7 +80,7 @@ def fetch_recent_form4(as_of, *, days=14, token=None, request=read_form4,
     query = urllib.parse.urlencode({
         "filing_date.gte": start.isoformat(),
         "filing_date.lte": end.isoformat(),
-        "transaction_code": "P",
+        "transaction_code": transaction_code,
         "form_type": "4",
         "sort": "filing_date.desc",
         "limit": "1000",
