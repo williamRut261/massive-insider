@@ -221,11 +221,13 @@ def plan_rebalance(client, snapshot, scores, *, expected_account, now=None):
         excess = held_value - target
         if excess < band and target > 0:
             continue
-        if excess < MIN_TRADE:
+        # Full exits can clean up small fractional PAPER remnants; partial
+        # rebalances retain the normal minimum-dollar churn guard.
+        if excess < (Decimal("1") if target <= 0 else MIN_TRADE):
             continue
         qty = usd(pos["qty"])
-        if qty <= 0 or held_value <= 0:
-            continue
+        if qty <= 0 or held_value <= 0 or qty.as_tuple().exponent < -9:
+            continue  # Alpaca PAPER maximum fractional quantity precision
         sell_qty = (qty * excess / held_value).quantize(MAX_QTY_DP,
                                                         rounding=ROUND_DOWN)
         if target <= 0:
