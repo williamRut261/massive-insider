@@ -190,11 +190,20 @@ def check_state(state, symbol, notional, expected_account=None, require_open=Fal
     if (not isinstance(positions, list) or positions or not isinstance(orders, list)
             or orders or len(orders) == 500):
         raise ValueError("PAPER pilot requires an empty account: zero positions and open orders")
-    if (asset.get("symbol") != symbol or asset.get("asset_class") != "us_equity"
-            or asset.get("status") != "active" or asset.get("tradable") is not True
-            or asset.get("fractionable") is not True
-            or asset.get("exchange") not in {"NYSE", "NASDAQ", "AMEX"}):
-        raise ValueError("Asset not eligible for simple exchange-listed fractional-share pilot")
+    # Alpaca's GET /v2/assets/{symbol} returns the asset type in "class",
+    # NOT "asset_class". A stale mock in the original tests concealed this bug.
+    if asset.get("symbol") != symbol:
+        raise ValueError("PAPER asset symbol mismatch")
+    if asset.get("class") != "us_equity":
+        raise ValueError("PAPER asset rejected: class is not us_equity")
+    if asset.get("status") != "active":
+        raise ValueError("PAPER asset rejected: status is not active")
+    if asset.get("tradable") is not True:
+        raise ValueError("PAPER asset rejected: tradable is not true")
+    if asset.get("fractionable") is not True:
+        raise ValueError("PAPER asset rejected: fractionable is not true; no notional order allowed")
+    if asset.get("exchange") not in {"NYSE", "NASDAQ", "AMEX"}:
+        raise ValueError("PAPER asset rejected: exchange not in permitted NYSE/NASDAQ/AMEX list")
     if require_open and clock.get("is_open") is not True:
         raise ValueError("Market must be open for PAPER pilot submission")
     equity, cash = usd(acct.get("equity")), usd(acct.get("cash"))
