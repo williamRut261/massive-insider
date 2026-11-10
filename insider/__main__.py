@@ -93,7 +93,8 @@ def main() -> int:
               "PAPER cycle:", outcome["status"])
         if outcome["plan"].get("proposed_order"):
             p = outcome["plan"]["proposed_order"]
-            print("Candidate:", p["symbol"], "size:", p["notional_usd"],
+            print("PAPER proposal:", p["side"], p["symbol"],
+                  "size:", p.get("notional_usd", p.get("qty")),
                   "account positions:", outcome["plan"]["position_count"])
         else:
             print("Reason:", outcome["plan"].get("block_reason"))
