@@ -1,4 +1,10 @@
-# Massive Insider v0.5 — SEC insider research + guarded PAPER portfolio manager
+# Massive Insider v0.6 — aggressive conviction-weighted Alpaca PAPER portfolio
+
+**Current active workflow:** v0.6 [four-factor insider conviction rebalancing](REBALANCE_V06.md). It invests up to 99.5% of PAPER equity *after subtracting protected legacy holdings*, with no concentration limit, sell-first rebalancing, 10-stock limit, and broker-history reconciliation. Uses the existing enabled GitHub Actions schedule and dedicated PAPER keys. **The original GME manual pilot is never sold by the bot.** Four-factor weights are experimental and have not been backtested.
+
+**v0.5 documentation below is historical**; `portfolio-cycle` remains available for diagnostics but the scheduled workflow now runs `rebalance-cycle --execute`.
+
+---
 
 **New:** [AUTOMATION.md](AUTOMATION.md) describes the opt-in, default-disabled weekday PAPER portfolio allocator with fresh Massive Form 4 purchases, SEC issuer identity validation, exposure and drawdown controls, broker order history, restart protection, and conservative exits only for fully attributable manager-owned lots.
 
