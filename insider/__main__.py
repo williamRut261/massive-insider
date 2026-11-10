@@ -63,6 +63,7 @@ def main() -> int:
     cycle.add_argument("--execute", action="store_true",
                        help="Allow one PAPER entry only when MI_PAPER_AUTO_ENABLED is set")
     cycle.add_argument("--output", default="reports/portfolio_latest.json")
+    cycle.add_argument("--history-output", default="reports/portfolio_history.jsonl")
     args = parser.parse_args()
 
     if args.command == "portfolio-cycle":
@@ -88,6 +89,26 @@ def main() -> int:
             "outcome": outcome,
         }
         save_json(args.output, result)
+        # On a persistent local Mac installation this journal provides a
+        # daily PAPER account-equity trail. GitHub runners are ephemeral.
+        history = Path(args.history_output)
+        history.parent.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(ZoneInfo("UTC")).isoformat()
+        audit = {
+            "timestamp_utc": stamp, "as_of": day,
+            "account_id": outcome["plan"]["account_id"],
+            "paper_equity_usd": outcome["plan"]["equity_usd"],
+            "paper_cash_usd": outcome["plan"]["cash_usd"],
+            "paper_equity_delta_usd": outcome["plan"][
+                "equity_change_from_initial_1000_usd"],
+            "portfolio_position_count": outcome["plan"]["position_count"],
+            "fresh_form4_candidate_count": len(candidates),
+            "cycle_status": outcome["status"],
+            "proposed_order": outcome["plan"].get("proposed_order"),
+            "paper_broker_order": outcome.get("paper_broker_order"),
+        }
+        with history.open("a", encoding="utf-8") as logfile:
+            logfile.write(json.dumps(audit, allow_nan=False) + "\n")
         print("Form4 records:", len(form4_rows),
               "fresh qualifying issuers:", len(candidates),
               "PAPER cycle:", outcome["status"])
