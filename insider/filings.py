@@ -304,6 +304,25 @@ def rank_candidates(scan: dict, filings: list[dict], *,
             if doc["form_type"] == "4/A":
                 sec_links.append(doc["source_url"])
         owner_groups = {related.get(c, c) for c in qualifying_owner_ids}
+        observed_owners = {}
+        filing_audit = []
+        for doc in f:
+            for owner in doc["reporting_owners"]:
+                observed_owners[owner["owner_cik"]] = owner
+            filing_audit.append({
+                "accession_number": doc["accession_number"],
+                "source_url": doc["source_url"],
+                "form_type": doc["form_type"],
+                "reported_owner_ciks": sorted(
+                    owner["owner_cik"] for owner in doc["reporting_owners"]),
+                "trading_plan_checkbox": doc["trading_plan_checkbox"],
+                "qualifying_purchase_usd_in_document":
+                    doc["qualifying_purchase_usd"],
+                "transactions": doc["non_derivative_transactions"],
+            })
+        related_groups = defaultdict(list)
+        for owner_cik in qualifying_owner_ids:
+            related_groups[related.get(owner_cik, owner_cik)].append(owner_cik)
         status = ("SEC_FORM4_PURCHASE_RESEARCH"
                   if verified_event_count else
                   "SEC_FILES_REVIEWED_NO_QUALIFYING_P"
@@ -323,7 +342,13 @@ def rank_candidates(scan: dict, filings: list[dict], *,
             "sec_confirmed_direct_purchase_usd": round(direct, 2),
             "sec_qualifying_transaction_count": verified_event_count,
             "distinct_reporting_owner_ciks": len(qualifying_owner_ids),
+            "reporting_owners_from_sec": [
+                observed_owners[owner_id]
+                for owner_id in sorted(observed_owners)],
             "conservative_related_owner_group_count": len(owner_groups),
+            "related_owner_group_members": [
+                sorted(members) for _, members in sorted(related_groups.items())],
+            "form4_audit": filing_audit,
             "sec_xml_sources": sorted(set(sec_links)),
             "listed_common_stock_eligibility_verified": False,
             "independent_economic_buyers_verified": False,
