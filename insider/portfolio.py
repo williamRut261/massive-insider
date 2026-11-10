@@ -207,7 +207,7 @@ def proposed_order(client, s, candidates, *, expected_account, now=None,
         "pending_broker_orders": len(x["open_orders"]),
         "proposed_order": None,
         "note": ("Automated PAPER entries only; pre-existing GME is retained. "
-                 "No auto sells, alpha guarantee or LIVE access."),
+                 "No sale of pilot/manual shares, alpha guarantee or LIVE access."),
     }
     block = None
     if not x["can_buy"]:
@@ -217,12 +217,6 @@ def proposed_order(client, s, candidates, *, expected_account, now=None,
     elif daily >= MAX_DAILY_NEW_ORDERS:
         block = "Maximum two automation orders already submitted today"
 
-    elif x["equity"] < STRATEGY_CAP * Decimal(".80"):
-        block = "Equity below 80% of initial $1k; new buying suspended"
-    elif x["cash"] <= CASH_RESERVE:
-        block = "Insufficient cash reserve"
-    elif x["market_value"] >= STRATEGY_CAP:
-        block = "Already at $1k gross stock exposure"
     if block:
         basic["block_reason"] = block
         return basic
@@ -240,6 +234,16 @@ def proposed_order(client, s, candidates, *, expected_account, now=None,
                             for o in x["recent_orders"])):
             basic["proposed_order"] = exit_order
             return basic
+    # Entry-only limits must never prevent an otherwise authorized age exit.
+    if x["equity"] < STRATEGY_CAP * Decimal(".80"):
+        basic["block_reason"] = "Equity below 80% of initial $1k; new buying suspended"
+        return basic
+    if x["cash"] <= CASH_RESERVE:
+        basic["block_reason"] = "Insufficient cash reserve"
+        return basic
+    if x["market_value"] >= STRATEGY_CAP:
+        basic["block_reason"] = "Already at $1k gross stock exposure"
+        return basic
     if len(x["held"]) >= MAX_STOCKS:
         basic["block_reason"] = "Maximum ten current positions"
         return basic
