@@ -1,4 +1,11 @@
-# Massive Insider v0.4 — SEC insider research + guarded PAPER pilot
+# Massive Insider v0.5 — SEC insider research + guarded PAPER portfolio manager
+
+**New:** [AUTOMATION.md](AUTOMATION.md) describes the opt-in, default-disabled weekday PAPER portfolio allocator with fresh Massive Form 4 purchases, SEC issuer identity validation, exposure and drawdown controls, broker order history, restart protection, and conservative exits only for fully attributable manager-owned lots.
+
+**Your previously filled $25 GME PAPER pilot stays untouched.** The strategy automatically skips any existing position, and it does not sell pilot/manual holdings. There is no LIVE account connection. **Automated orders are not active merely because code was committed**: operator opt-in and separately configured PAPER credentials are required.
+
+---
+## Prior v0.4 — isolated single-order PAPER pilot
 
 **New: [Alpaca PAPER-only single-order setup instructions](PAPER_PILOT.md).** This is an explicitly approved, isolated broker-connectivity experiment; no LIVE endpoint or keys can be used and no orders are submitted by default. Automated portfolio trading and a validated historical strategy are not yet implemented.
 
