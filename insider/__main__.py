@@ -49,6 +49,7 @@ def main() -> int:
     preview.add_argument("--output", default="reports/paper_preview.json")
     submit = sub.add_parser("paper-submit", help="ONE Alpaca PAPER order with explicit approval")
     submit.add_argument("--plan", required=True)
+    submit.add_argument("--input", required=True, help="Original SEC-verified v0.3 research JSON")
     submit.add_argument("--expected-account", required=True)
     submit.add_argument("--confirm", required=True)
     submit.add_argument("--output", default="reports/paper_receipt.json")
@@ -72,8 +73,9 @@ def main() -> int:
         return 0
     if args.command == "paper-submit":
         plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+        research = json.loads(Path(args.input).read_text(encoding="utf-8"))
         result = paper_submit(plan, PaperClient(), confirm=args.confirm,
-                              expected_account=args.expected_account)
+                              expected_account=args.expected_account, report=research)
         save_json(args.output, result)
         print("PAPER broker response:", result["status"], "saved:", args.output)
         print("Inspect order status at the Alpaca PAPER dashboard; submitted != filled")
