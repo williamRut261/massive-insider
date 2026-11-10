@@ -67,7 +67,7 @@ You can disable local execution by running `unset MI_PAPER_AUTO_ENABLED`. The ac
 
 ## Step 4 (optional): Enable recurring GitHub Actions PAPER-only scheduling
 
-A default-disabled workflow is committed at [`.github/workflows/paper-portfolio.yml`](.github/workflows/paper-portfolio.yml). It runs on weekdays at **13:45 and 14:45 UTC**, accommodating both Eastern daylight and standard time, but it checks the *actual NYSE broker clock and 9:45 a.m.–3:40 p.m. Eastern time window* before any order. A delayed Actions trigger outside hours performs no order.
+A default-disabled workflow is committed at [`.github/workflows/paper-portfolio.yml`](.github/workflows/paper-portfolio.yml). It is now scheduled **every 15 minutes on weekdays from 9:52 a.m. to 3:37 p.m. New York time**, using GitHub Actions' `America/New_York` timezone so daylight-saving changes are handled automatically. On every run it checks the *actual Alpaca PAPER market clock and the stricter 9:45 a.m.–3:40 p.m. ET trading window* before any order. A delayed Actions trigger outside that window makes no trade. GitHub schedules are best-effort, not a guarantee of precise timing.
 
 To enable it, open your repository **Settings → Secrets and variables → Actions**, and add:
 
@@ -83,6 +83,10 @@ To enable it, open your repository **Settings → Secrets and variables → Acti
 Do not set those secrets in the repo README, `.env`, or in a public commit. Credentials stay in GitHub encrypted Actions secrets and are exposed only to the opt-in main-branch workflow's running job. **Workflow is disabled by default** because these variables/secrets are not currently known to be configured.
 
 To stop recurring orders at any point, set `MI_PAPER_AUTOMATION_ENABLED` to `NO` in Actions Variables or remove the activation secret; the next workflow run will skip. This does not cancel already submitted PAPER orders or automatically liquidate holdings.
+
+**Hands-off requirements:** Once the four secrets and two variables below are configured, and the repository workflow is enabled, you do not need to keep your Mac on or rerun any Terminal command. You can use the repository's **Actions → Massive Insider - guarded PAPER portfolio → Run workflow** to verify that a run executes and read its logs. It may submit an order if the automation is active and a stock qualifies. Keep the account dedicated to this bot: do not manually trade or add cash without reconciling the strategy's $1,000 virtual-capital assumption.
+
+**GitHub schedule limitations:** GitHub warns that scheduled jobs may be delayed or skipped during high load; this is **periodic unattended scanning, not continuous tick-level execution**. Also, for **public repositories**, scheduled workflows are disabled after **60 days without repository activity**. Review the Actions page periodically or move this job to a persistent, maintained VPS/system service if you need indefinite operation. This workflow does not proactively alert on every skipped run, and repeated failures require investigation.
 
 **Actions runner limitation:** each GitHub Actions run is ephemeral, so `reports/portfolio_history.jsonl` is not persisted across scheduled runs. The broker's positions and order history remain the authoritative state. For a durable returns dashboard, use a persistent runner/storage solution and reconcile deposits/withdrawals. The simple percentage change from the initial $1,000 does not adjust for account transfers.
 
