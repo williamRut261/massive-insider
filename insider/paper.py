@@ -243,7 +243,7 @@ def make_preview(report, symbol, notional, client, now=None):
     }
 
 
-def paper_submit(preview, client, *, confirm, expected_account, now=None):
+def paper_submit(preview, client, *, confirm, expected_account, report=None, now=None):
     """A single explicitly authorized paper buy; no retry on ambiguous acknowledgement."""
     if confirm != "I-APPROVE-PAPER-ONLY":
         raise ValueError("Explicit PAPER approval string required")
@@ -252,6 +252,10 @@ def paper_submit(preview, client, *, confirm, expected_account, now=None):
     ):
         raise ValueError("Unsupported/unsafe preview")
     symbol = validate_symbol(preview.get("symbol"))
+    if report is not None:
+        verified = verified_symbol(report, symbol)
+        if sorted(preview.get("sec_form4_source_urls", [])) != sorted(verified["sec_xml_sources"]):
+            raise ValueError("SEC research sources changed since preview")
     ident = preview.get("client_order_id")
     if not isinstance(ident, str) or not CLIENT_ID_RE.fullmatch(ident):
         raise ValueError("Invalid paper order ID")
