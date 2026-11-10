@@ -143,7 +143,10 @@ class AggressiveRebalanceTests(unittest.TestCase):
         x = plan([signal("UPBD", .5), signal("AAA", .5)], client=c)
         self.assertEqual({t["symbol"]: t["target_usd"] for t in x["target_weights"]},
                          {"UPBD": "485.00", "AAA": "485.00"})
-        self.assertEqual(x["proposed_order"]["symbol"], "UPBD")
+        # With UPBD at $100 (< $485 target), cash can immediately fund
+        # the new AAA position; no UPBD sale is required.
+        self.assertEqual(x["proposed_order"]["symbol"], "AAA")
+        self.assertEqual(x["proposed_order"]["side"], "buy")
 
     def test_overweight_manager_stock_sold_first(self):
         s = state()
