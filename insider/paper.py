@@ -201,7 +201,7 @@ def check_state(state, symbol, notional, expected_account=None, require_open=Fal
     if asset.get("tradable") is not True:
         raise ValueError("PAPER asset rejected: tradable is not true")
     if asset.get("fractionable") is not True:
-        raise ValueError("PAPER asset rejected: fractionable is not true; no notional order allowed")
+        raise ValueError("PAPER asset not eligible: fractionable is not true; no notional order allowed")
     if asset.get("exchange") not in {"NYSE", "NASDAQ", "AMEX"}:
         raise ValueError("PAPER asset rejected: exchange not in permitted NYSE/NASDAQ/AMEX list")
     if require_open and clock.get("is_open") is not True:
