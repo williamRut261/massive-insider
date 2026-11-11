@@ -1,18 +1,15 @@
 name: Massive Insider - PAPER conviction rebalancing v0.6
 
 on:
-  # Scheduled about every 15 minutes during US stock market hours, weekdays.
-  # GitHub timezone support handles both EST and EDT automatically.
-  # Staggered 07/22/37/52 avoids the top-of-hour Actions congestion.
-  # Broker market clock, 09:45-15:40 NY trading window and safety limits
-  # are rechecked before any simulated order. Schedules may be delayed.
+  # Explicit UTC schedule for both US standard and daylight time,
+  # avoiding scheduler timezone ambiguity. Early/late UTC slots are NO-OP.
+  # Real NY exchange time + PAPER market-open clock are enforced in Python.
+  # During EST: eligible 14:52-20:37 UTC; during EDT: 13:52-19:37 UTC.
+  # GitHub schedule delivery can be delayed/skipped; no trading after hours.
   schedule:
-    - cron: '52 9 * * 1-5'
-      timezone: 'America/New_York'
-    - cron: '7,22,37,52 10-14 * * 1-5'
-      timezone: 'America/New_York'
-    - cron: '7,22,37 15 * * 1-5'
-      timezone: 'America/New_York'
+    - cron: '52 13 * * 1-5'
+    - cron: '7,22,37,52 14-19 * * 1-5'
+    - cron: '7,22,37 20 * * 1-5'
   workflow_dispatch:
 
 permissions:
