@@ -78,6 +78,11 @@ class V06CliIntegrationTests(unittest.TestCase):
         self.assertIn("MI_PAPER_ACCOUNT_ID", content)
         self.assertIn("secrets.MI_ALPACA_PAPER_SECRET_KEY", content)
         self.assertIn("concurrency:", content)
+        # UTC slots include both EDT and EST; actual exchange time remains
+        # authoritative and is checked in the broker rebalance engine.
+        self.assertIn("cron: '52 13 * * 1-5'", content)
+        self.assertIn("cron: '7,22,37 20 * * 1-5'", content)
+        self.assertNotIn("timezone:", content)
 
 
 if __name__ == "__main__":
