@@ -1,16 +1,15 @@
 name: Massive Insider - PAPER conviction rebalancing v0.6
 
 on:
-  # Two daily checks near 10 AM and 3 PM Houston time (America/Chicago).
+  # Two daily checks near 10 AM and 2 PM Houston time (America/Chicago).
   # GitHub cron is UTC; all seasonal UTC slots are listed below, and the first
-  # step runs the cycle only when the actual Houston hour is 10 or 15.
+  # step runs the cycle only when the actual Houston hour is 10 or 14.
   # The :17 offset avoids GitHub's documented top-of-hour schedule congestion.
   # 10 AM CT is 11 AM ET and is eligible for regular-session execution.
-  # 3 PM CT is after the regular-session execution cutoff; the Python market
-  # clock remains authoritative and rejects any after-hours order.
+  # 2 PM CT is about 43 minutes before the 3 PM Houston regular-session close.
   # GitHub schedule delivery can still be delayed or skipped.
   schedule:
-    - cron: '17 15,16,20,21 * * 1-5'
+    - cron: '17 15,16,19,20 * * 1-5'
   workflow_dispatch:
 
 permissions:
@@ -35,7 +34,7 @@ jobs:
             echo "run_cycle=true" >> "$GITHUB_OUTPUT"
           else
             local_hour="$(TZ=America/Chicago date +%H)"
-            if [[ "$local_hour" == "10" || "$local_hour" == "15" ]]; then
+            if [[ "$local_hour" == "10" || "$local_hour" == "14" ]]; then
               echo "run_cycle=true" >> "$GITHUB_OUTPUT"
               echo "Houston schedule hour accepted: $local_hour"
             else
