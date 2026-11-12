@@ -1,15 +1,15 @@
 name: Massive Insider - PAPER conviction rebalancing v0.6
 
 on:
-  # Explicit UTC schedule for both US standard and daylight time,
-  # avoiding scheduler timezone ambiguity. Early/late UTC slots are NO-OP.
-  # Real NY exchange time + PAPER market-open clock are enforced in Python.
-  # During EST: eligible 14:52-20:37 UTC; during EDT: 13:52-19:37 UTC.
-  # GitHub schedule delivery can be delayed/skipped; no trading after hours.
+  # Two daily checks in Houston time (America/Chicago): 9 AM and 3 PM.
+  # GitHub cron is UTC, so all four seasonal UTC slots are listed below;
+  # the first step runs the cycle only when the actual Houston hour is 09 or 15.
+  # 9 AM CT is 10 AM ET and is eligible for regular-session execution.
+  # 3 PM CT is after the regular-session execution cutoff; the Python market
+  # clock remains authoritative and will reject any after-hours order.
+  # GitHub schedule delivery can still be delayed or skipped.
   schedule:
-    - cron: '52 13 * * 1-5'
-    - cron: '7,22,37,52 14-19 * * 1-5'
-    - cron: '7,22,37 20 * * 1-5'
+    - cron: '0 14,15,20,21 * * 1-5'
   workflow_dispatch:
 
 permissions:
@@ -21,19 +21,38 @@ concurrency:
 
 jobs:
   paper-portfolio:
-    # Explicit TWO-GATE opt-in: repository variable and dedicated secret.
-    # This remains SKIPPED until user enables it after reviewing setup.
+    # Two-gate PAPER opt-in: repo variable plus dedicated secrets.
     if: ${{ vars.MI_PAPER_AUTOMATION_ENABLED == 'YES' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Select the intended Houston-time schedule slot
+        id: slot
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" != "schedule" ]]; then
+            echo "run_cycle=true" >> "$GITHUB_OUTPUT"
+          else
+            local_hour="$(TZ=America/Chicago date +%H)"
+            if [[ "$local_hour" == "09" || "$local_hour" == "15" ]]; then
+              echo "run_cycle=true" >> "$GITHUB_OUTPUT"
+              echo "Houston schedule hour accepted: $local_hour"
+            else
+              echo "run_cycle=false" >> "$GITHUB_OUTPUT"
+              echo "Ignoring duplicate UTC slot; Houston local hour is $local_hour"
+            fi
+          fi
       - uses: actions/checkout@v4
+        if: steps.slot.outputs.run_cycle == 'true'
       - uses: actions/setup-python@v5
+        if: steps.slot.outputs.run_cycle == 'true'
         with:
           python-version: '3.11'
       - name: Run safety regression tests offline
+        if: steps.slot.outputs.run_cycle == 'true'
         run: python -m unittest discover -s tests -q
       - name: Scan purchases and sales, score convictions and rebalance PAPER (v0.6)
+        if: steps.slot.outputs.run_cycle == 'true'
         env:
           MASSIVE_API_KEY: ${{ secrets.MI_MASSIVE_API_KEY }}
           MI_ALPACA_PAPER_KEY_ID: ${{ secrets.MI_ALPACA_PAPER_KEY_ID }}
